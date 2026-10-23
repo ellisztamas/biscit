@@ -41,7 +41,7 @@ stderr).
 | --- | --- | --- |
 | `--n-generations-selfing` | 10 | Selfing generations used for emission probabilities |
 | `--n-self` | 10 | Selfing generations used in the transition model |
-| `-N`, `--min-duration` | 50 | Minimum state duration (in markers) in the decoder |
+| `-N`, `--min-markers` | 50 | Minimum state duration (in markers) in the decoder |
 | `--min-length` | 50000 | Minimum segment length (bp) before a stretch is marked Novel |
 | `--chr-lengths` | TAIR10 | `Chr1=30427671,Chr2=19698289,...` chromosome lengths |
 
