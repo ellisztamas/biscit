@@ -18,7 +18,28 @@ DEFAULT_CHR_LENGTHS = {
 }
 
 def parse_chr_lengths(value):
-    """Parse a ``Chr1=30427671,Chr2=19698289`` style string into a dict."""
+    """
+    Parse a chromosome-lengths string into a dict.
+
+    Used as the argparse ``type`` for ``--chr-lengths``.
+
+    Parameters
+    ----------
+    value : str or None
+        Comma-separated ``NAME=LENGTH`` pairs, e.g.
+        ``"Chr1=30427671,Chr2=19698289"``. Empty entries are ignored. If None,
+        the TAIR10 defaults are returned.
+
+    Returns
+    -------
+    dict of str to int
+        Mapping from chromosome name to length in base pairs.
+
+    Raises
+    ------
+    argparse.ArgumentTypeError
+        If an entry lacks ``=`` or its length is not an integer.
+    """
     if value is None:
         return dict(DEFAULT_CHR_LENGTHS)
     lengths = {}
@@ -41,6 +62,15 @@ def parse_chr_lengths(value):
 
 
 def build_parser():
+    """
+    Build the command-line argument parser for ``biscit``.
+
+    Returns
+    -------
+    argparse.ArgumentParser
+        Parser for the input files, sample names, output path, chromosome
+        selection and lengths, and the HMM and filtering parameters.
+    """
     parser = argparse.ArgumentParser(
         prog="biscit",
         description=(
@@ -52,7 +82,7 @@ def build_parser():
     parser.add_argument(
         "--reference", required=True, 
         help=(
-            "Path to the reference/parental HDF5 file."
+            "Path to the reference/parental HDF5 file. "
             "REF/ALT alleles must be coded identically to those in --input."
             )
     )
@@ -84,7 +114,7 @@ def build_parser():
     )
     parser.add_argument(
         "--min-base-pairs", type=int, default=50000,
-        help="Minimum genomic length (bp) before a stretch is reassigned to Novel (default: 50000).",
+        help="Minimum genomic length (bp) before a stretch is reassigned to Unassigned (default: 50000).",
     )
     return parser
 
@@ -93,6 +123,33 @@ def build_parser():
 
 
 def process_chromosome(chrom, data, chr_length, args):
+    """
+    Decode ancestry segments for one chromosome.
+
+    Computes emission probabilities, runs the minimum-duration Viterbi
+    decoder, collapses the path into segments, masks short segments, and pads
+    to the chromosome ends.
+
+    Parameters
+    ----------
+    chrom : str
+        Chromosome name, written to the ``chrom`` column.
+    data : dict of str to numpy.ndarray
+        Aligned data for this chromosome, with keys ``"positions"``,
+        ``"parent1"``, ``"parent2"`` and ``"offspring"``, as returned per
+        chromosome by `biscit.io.extract_aligned_pl`.
+    chr_length : int
+        Chromosome length in base pairs.
+    args : argparse.Namespace
+        Parsed arguments; uses ``n_generations_selfing``, ``min_markers`` and
+        ``min_base_pairs``.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Segment table with columns ``chrom``, ``start_pos``, ``end_pos``,
+        ``n_markers`` and ``state``.
+    """
     emission_probs = get_emission_probs(
         data, n_generations_selfing=args.n_generations_selfing
     )
@@ -103,6 +160,7 @@ def process_chromosome(chrom, data, chr_length, args):
         n_self=args.n_generations_selfing,
         initial=None,
     )
+    # Collapse to segments, mask short ones, then pad to chromosome ends
     bed_table_long = summarize_path(best_path, data["positions"])
     bed_table = filter_short_stretches(bed_table_long, min_length=args.min_base_pairs)
     bed_table = add_boundary_regions(bed_table, chr_length=chr_length)
@@ -112,9 +170,29 @@ def process_chromosome(chrom, data, chr_length, args):
 
 
 def main(argv=None):
+    """
+    Run ``biscit`` from the command line.
+
+    Loads and aligns the offspring and parental PL arrays, decodes each
+    selected chromosome, and writes a BED-like TSV with columns ``chrom``,
+    ``start_pos``, ``end_pos``, ``state``, ``state_label`` and ``n_markers``.
+    Progress messages and warnings go to stderr.
+
+    Parameters
+    ----------
+    argv : list of str, optional
+        Command-line arguments. If None, ``sys.argv[1:]`` is used.
+
+    Returns
+    -------
+    int
+        Exit status: 0 on success, 1 if there are no comparable markers or
+        nothing to output.
+    """
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    # argparse does not apply `type` to a None default, so fill it in here
     chr_lengths = args.chr_lengths or dict(DEFAULT_CHR_LENGTHS)
 
     pl_arrays = extract_aligned_pl(
@@ -125,6 +203,7 @@ def main(argv=None):
         print("No comparable markers found between input and reference.", file=sys.stderr)
         return 1
 
+    # Restrict to requested chromosomes, warning about any with no data
     if args.chromosomes:
         wanted = [c.strip() for c in args.chromosomes.split(",") if c.strip()]
         chroms = [c for c in wanted if c in pl_arrays]
@@ -141,6 +220,8 @@ def main(argv=None):
             f"Chromosome {chrom}: {len(data['positions'])} comparable markers",
             file=sys.stderr,
         )
+        # Fall back to the last marker if the length is unknown, so no
+        # trailing boundary segment is added
         if chrom not in chr_lengths:
             print(
                 f"Warning: no length for chromosome '{chrom}'; using last marker position.",
@@ -165,6 +246,7 @@ def main(argv=None):
         }
     result["state_label"] = result["state"].map(STATE_LABELS).fillna("Unknown")
     columns = ["chrom", "start_pos", "end_pos", "state", "state_label", "n_markers"]
+    # Fix column order for the output
     result = result[[c for c in columns if c in result.columns]]
 
     if args.output:
