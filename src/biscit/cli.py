@@ -49,7 +49,13 @@ def build_parser():
         ),
     )
     parser.add_argument("--input", required=True, help="Path to the test/offspring HDF5 file.")
-    parser.add_argument("--reference", required=True, help="Path to the reference/parental HDF5 file.")
+    parser.add_argument(
+        "--reference", required=True, 
+        help=(
+            "Path to the reference/parental HDF5 file."
+            "REF/ALT alleles must be coded identically to those in --input."
+            )
+    )
     parser.add_argument("--offspring", required=True, help="Offspring sample name in --input.")
     parser.add_argument("--parent1", required=True, help="First parent sample name in --reference.")
     parser.add_argument("--parent2", required=True, help="Second parent sample name in --reference.")
