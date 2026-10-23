@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "biscit"
+version = "0.1.0"
+description = "HMM-based imputation of offspring genotypes from parental PL arrays (A. thaliana RIL crosses)"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=1.22",
+    "pandas>=1.4",
+    "h5py>=3.6",
+]
+
+[project.scripts]
+biscit = "biscit.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
