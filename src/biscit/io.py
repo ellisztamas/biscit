@@ -70,8 +70,8 @@ def extract_aligned_pl(input, reference, offspring_name, parent1_name, parent2_n
     Align offspring and parental PL arrays per chromosome.
 
     Loci are matched on chromosome and position only (alleles are not
-    compared). A locus is dropped if, for any of the three individuals, all PL
-    values are missing (-1) or all are zero, or if either parent has
+    compared). A locus is dropped if, for any of the three individuals, any PL
+    value is negative (missing, -1) or all are zero, or if either parent has
     ``PL[1] == 0`` (i.e. the heterozygote is the most likely genotype).
 
     Parameters
@@ -129,12 +129,14 @@ def extract_aligned_pl(input, reference, offspring_name, parent1_name, parent2_n
         parent2 = parent2_pl[ref_mask][ref_idx]
         offspring = offspring_pl[test_mask][test_idx]
 
-        # Drop loci that are missing (all -1) or uninformative (all 0) in any
-        # individual, or where either parent is most likely heterozygous
+        # Drop loci that are wholly or partly missing (any negative PL) or
+        # uninformative (all 0) in any individual, or where either parent is
+        # most likely heterozygous. Negative PLs would otherwise become
+        # likelihoods above 1 in `pl_to_gl`.
         keep = ~(
-            np.all(parent1 == -1, axis=1)
-            | np.all(parent2 == -1, axis=1)
-            | np.all(offspring == -1, axis=1)
+            np.any(parent1 < 0, axis=1)
+            | np.any(parent2 < 0, axis=1)
+            | np.any(offspring < 0, axis=1)
             | np.all(parent1 == 0, axis=1)
             | np.all(parent2 == 0, axis=1)
             | np.all(offspring == 0, axis=1)
