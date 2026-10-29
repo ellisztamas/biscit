@@ -1,7 +1,6 @@
 # Booyah! Intra-Swedish-Crosses Imputation Tool (BISCIT)
 
-HMM-based imputation of offspring genotypes from parental PL arrays, designed for
-*Arabidopsis thaliana* RIL (recombinant inbred line) crosses.
+HMM-based imputation of offspring genotypes from parental genotype data, designed for *Arabidopsis thaliana* RIL (recombinant inbred line) crosses.
 
 `biscit` reads Phred-scaled genotype likelihoods (`calldata/PL`) from HDF5-converted VCFs for an offspring and its two parents, builds per-marker emission probabilities, and decodes the most likely ancestry path (parent 1 homozygous, heterozygous, parent 2 homozygous, or a "novel"/private state) with a minimum-duration Viterbi algorithm. The result is a BED-like table of genotype segments per chromosome.
 
@@ -15,7 +14,7 @@ pip install -e .
 This installs the `biscit` command and the importable `biscit` package
 (dependencies: `numpy`, `pandas`, `h5py`).
 
-Alteratively, install a conda/mamba environment:
+Alternatively, install a conda/mamba environment:
 
 ```bash
 cd biscit
@@ -63,7 +62,7 @@ stderr).
 | --- | --- | --- |
 | `--n-generations-selfing` | 10 | Selfing generations used for emission probabilities |
 | `-N`, `--min-markers` | 50 | Minimum state duration (in markers) in the decoder |
-| `--min-length` | 50000 | Minimum segment length (bp) before a stretch is marked Novel |
+| `--min-base-pairs` | 50000 | Minimum segment length (bp) before a stretch is marked Unassigned |
 | `--chr-lengths` | TAIR10 | `Chr1=30427671,Chr2=19698289,...` chromosome lengths |
 
 ### Output columns
@@ -71,7 +70,8 @@ stderr).
 `chrom`, `start_pos`, `end_pos`, `state`, `state_label`, `n_markers`
 
 State labels: `0=AA` (parent 1), `1=AB` (heterozygous), `2=BB` (parent 2),
-`3=Novel`.
+`3=Unassigned` (novel/private alleles, segments shorter than `--min-base-pairs`,
+and stretches at chromosome ends).
 
 
 ## License
