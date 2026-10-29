@@ -23,7 +23,7 @@ def pl_to_gl(pl):
 
 def get_emission_probs(pl_array, n_generations_selfing):
     """
-    Compute per-locus emission probabilities for the four hidden states.
+    Compute per-locus emission probabilities for the three hidden states.
 
     Combines the genotype likelihoods of the offspring and both parents to
     give the probability of the observed data under each ancestry state.
@@ -41,10 +41,9 @@ def get_emission_probs(pl_array, n_generations_selfing):
     Returns
     -------
     numpy.ndarray
-        Emission probabilities, shape ``(n_loci, 4)``. Columns correspond to
-        homozygous for parent 1, heterozygous, homozygous for parent 2, and
-        a private allele not explained by either parent. Rows are not
-        normalized.
+        Emission probabilities, shape ``(n_loci, 3)``. Columns correspond to
+        0 = AA (homozygous for parent 1), 1 = AB (heterozygous) and
+        2 = BB (homozygous for parent 2). Rows are not normalized.
     """
     # Genotype likelihoods; column 0 = hom-REF, 1 = het, 2 = hom-ALT
     gl_f10 = pl_to_gl(pl_array["offspring"])
@@ -85,21 +84,12 @@ def get_emission_probs(pl_array, n_generations_selfing):
         + gl_p1[:, 2] * gl_p2[:, 2] * gl_f10[:, 2]
     ) * (1 - pr_het_base) * 0.5
 
-    # Private allele: parents agree but the offspring carries the other allele
-    # (homozygous or het), e.g. a new mutation or a genotyping error
-    pr_private = (
-        gl_p1[  :, 0] * gl_p2[:, 0] * gl_f10[:, 2]
-        + gl_p1[:, 2] * gl_p2[:, 2] * gl_f10[:, 0]
-        + gl_p1[:, 0] * gl_p2[:, 0] * gl_f10[:, 1]
-        + gl_p1[:, 2] * gl_p2[:, 2] * gl_f10[:, 1]
-    )
-
-    # Stack into shape (n_loci, 4)
-    emission_probs = np.array([pr_hom1, pr_het, pr_hom2, pr_private]).T
+    # Stack into shape (n_loci, 3)
+    emission_probs = np.array([pr_hom1, pr_het, pr_hom2]).T
     return emission_probs
 
 
-def transition_matrix(pos1, pos2, cM_per_Mb=4.0, n_self=10, eps_novel=1e-12):
+def transition_matrix(pos1, pos2, cM_per_Mb=4.0, n_self=10):
     """
     Compute the transition matrix between two adjacent markers.
 
@@ -117,16 +107,13 @@ def transition_matrix(pos1, pos2, cM_per_Mb=4.0, n_self=10, eps_novel=1e-12):
     n_self : int, optional
         Number of generations of selfing. Sets the probability of moving to or
         from the heterozygous state, ``0.5 ** (n_self - 1)``. Default is 10.
-    eps_novel : float, optional
-        Probability of moving into or out of the private-allele state.
-        Default is 1e-12.
 
     Returns
     -------
     numpy.ndarray
-        Transition matrix of shape ``(4, 4)``, where entry ``[i, j]`` is the
+        Transition matrix of shape ``(3, 3)``, where entry ``[i, j]`` is the
         probability of moving from state ``i`` to state ``j``. States are
-        ordered AA (parent 1), AB (heterozygous), BB (parent 2), Novel.
+        ordered 0 = AA (parent 1), 1 = AB (heterozygous), 2 = BB (parent 2).
     """
     # Genetic distance in Morgans, assuming a constant recombination rate
     d_M = cM_per_Mb * abs(pos2 - pos1) / 1e6 / 100
@@ -143,14 +130,7 @@ def transition_matrix(pos1, pos2, cM_per_Mb=4.0, n_self=10, eps_novel=1e-12):
         [h / 2,         1 - h, h / 2],
         [r_ril,         h,     1 - r_ril - h],
     ])
-
-    # Add the Novel state, which is rarely entered or left
-    T4 = np.zeros((4, 4))
-    T4[:3, :3] = T * (1 - eps_novel)
-    T4[:3, 3] = eps_novel
-    T4[3, :3] = eps_novel / 3
-    T4[3, 3] = 1 - eps_novel
-    return T4
+    return T
 
 
 def viterbi_min_duration(pos, emissions, N, n_self, initial=None):
@@ -169,7 +149,7 @@ def viterbi_min_duration(pos, emissions, N, n_self, initial=None):
     pos : array_like of int
         Marker positions in base pairs, shape ``(n_loci,)``.
     emissions : numpy.ndarray
-        Emission probabilities, shape ``(n_loci, 4)``, as returned by
+        Emission probabilities, shape ``(n_loci, 3)``, as returned by
         `get_emission_probs`. Each row is normalized to sum to one; rows that
         sum to zero are replaced by a uniform distribution.
     N : int
@@ -178,15 +158,14 @@ def viterbi_min_duration(pos, emissions, N, n_self, initial=None):
     n_self : int
         Number of generations of selfing, passed to `transition_matrix`.
     initial : array_like of float, optional
-        Initial state probabilities, length 4. Normalized internally. If
+        Initial state probabilities, length 3. Normalized internally. If
         None, all states are equally likely.
 
     Returns
     -------
     numpy.ndarray of int
         Most likely state at each marker, shape ``(n_loci,)``, coded as
-        0 = AA (parent 1), 1 = AB (heterozygous), 2 = BB (parent 2),
-        3 = Novel.
+        0 = AA (parent 1), 1 = AB (heterozygous), 2 = BB (parent 2).
 
     Notes
     -----
@@ -194,12 +173,12 @@ def viterbi_min_duration(pos, emissions, N, n_self, initial=None):
     `transition_matrix`. Run time scales as ``O(n_loci * N)``.
     """
     # Normalize emissions per locus; loci with no support become uniform
+    n, n_states = emissions.shape
     totals = emissions.sum(axis=1, keepdims=True)
     emissions = np.divide(
-        emissions, totals, out=np.full_like(emissions, 0.25), where=totals > 0
+        emissions, totals, out=np.full_like(emissions, 1 / n_states), where=totals > 0
     )
 
-    n = len(emissions)
     # Work in log space, clipping zeros to avoid log(0)
     tiny = np.finfo(float).tiny
 
@@ -207,13 +186,13 @@ def viterbi_min_duration(pos, emissions, N, n_self, initial=None):
         return np.log(np.clip(p, tiny, 1.0))
 
     # Initial state distribution, uniform by default
-    pi = np.ones(4) if initial is None else np.asarray(initial, dtype=float)
+    pi = np.ones(n_states) if initial is None else np.asarray(initial, dtype=float)
     pi = pi / pi.sum()
 
     # Augmented state space: each hidden state s is paired with a counter
     # c in 1..N giving how many consecutive markers have been spent in s.
     # The counter stops at N, which means "free to switch".
-    n_aug = 4 * N
+    n_aug = n_states * N
 
     def aug(s, c):
         # Index of (state s, counter c) in the augmented state vector
@@ -222,7 +201,7 @@ def viterbi_min_duration(pos, emissions, N, n_self, initial=None):
     # Start every state with a full counter so the first segment is
     # unconstrained
     score = np.full(n_aug, -np.inf)
-    for s in range(4):
+    for s in range(n_states):
         score[aug(s, N)] = logp(pi[s]) + logp(emissions[0, s])
 
     # Backpointers: best previous augmented state for each marker and state
@@ -235,7 +214,7 @@ def viterbi_min_duration(pos, emissions, N, n_self, initial=None):
         new_score = np.full(n_aug, -np.inf)
         new_back = np.zeros(n_aug, dtype=int)
 
-        for s_prev in range(4):
+        for s_prev in range(n_states):
             for c_prev in range(1, N + 1):
                 idx_prev = aug(s_prev, c_prev)
                 sp = score[idx_prev]
@@ -254,7 +233,7 @@ def viterbi_min_duration(pos, emissions, N, n_self, initial=None):
                 # Switch to a different state only once the minimum duration
                 # is reached; the new segment starts with counter 1
                 if c_prev == N:
-                    for s_new in range(4):
+                    for s_new in range(n_states):
                         if s_new == s_prev:
                             continue
                         idx_new = aug(s_new, 1)
@@ -264,7 +243,7 @@ def viterbi_min_duration(pos, emissions, N, n_self, initial=None):
                             new_back[idx_new] = idx_prev
 
         # Add the emission for marker t to every reachable augmented state
-        for s in range(4):
+        for s in range(n_states):
             e = logp(emissions[t, s])
             for c in range(1, N + 1):
                 idx = aug(s, c)

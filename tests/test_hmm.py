@@ -45,7 +45,7 @@ def emissions_for(p1, p2, off, n_generations_selfing=10, pl_table=PL_BY_GENOTYPE
     Returns
     -------
     numpy.ndarray
-        Emission probabilities, shape ``(n_loci, 4)``.
+        Emission probabilities, shape ``(n_loci, 3)``.
     """
     pl = {
         "parent1": pl_table[np.atleast_1d(p1)],
@@ -64,9 +64,6 @@ def emissions_for(p1, p2, off, n_generations_selfing=10, pl_table=PL_BY_GENOTYPE
         (2, 0, 2, 0),
         (2, 0, 0, 2),
         (2, 0, 1, 1),
-        (0, 0, 2, 3),
-        (0, 0, 1, 3),
-        (2, 2, 0, 3),
     ],
 )
 def test_emission_argmax(p1, p2, off, expected):
@@ -77,7 +74,7 @@ def test_emission_argmax(p1, p2, off, expected):
 def test_emission_shape():
     rng = np.random.default_rng(0)
     em = emissions_for(rng.choice([0, 2], 25), rng.choice([0, 2], 25), rng.integers(0, 3, 25))
-    assert em.shape == (25, 4)
+    assert em.shape == (25, 3)
 
 
 @pytest.mark.parametrize("shared", [0, 2])
@@ -91,7 +88,7 @@ def test_monomorphic_site_split_by_expected_frequencies(shared, n_gen):
     exact = np.array([[0, 300, 300], [300, 0, 300], [300, 300, 0]])
     em = emissions_for(shared, shared, shared, n_gen, pl_table=exact)[0]
     h = 0.5 ** n_gen
-    np.testing.assert_allclose(em, [(1 - h) / 2, h, (1 - h) / 2, 0], atol=1e-12)
+    np.testing.assert_allclose(em, [(1 - h) / 2, h, (1 - h) / 2], atol=1e-12)
 
 
 # transition_matrix
@@ -100,7 +97,7 @@ def test_monomorphic_site_split_by_expected_frequencies(shared, n_gen):
 @pytest.mark.parametrize("distance", [0, 1_000, 1_000_000, 100_000_000])
 def test_transition_rows_are_distributions(distance, n_self):
     T = transition_matrix(0, distance, n_self=n_self)
-    assert T.shape == (4, 4)
+    assert T.shape == (3, 3)
     assert (T >= 0).all()
     np.testing.assert_allclose(T.sum(axis=1), 1)
 
@@ -129,8 +126,7 @@ def test_transition_recombination_increases_to_ril_limit():
     aa_to_bb = [transition_matrix(0, d)[0, 2] for d in distances]
     assert (np.diff(aa_to_bb) > 0).all()
     # Unlinked markers: Haldane r -> 0.5, so r_ril -> 2 * 0.5 / (1 + 1) = 0.5
-    eps_novel = 1e-12
-    assert transition_matrix(0, 1e12, eps_novel=eps_novel)[0, 2] == pytest.approx(0.5 * (1 - eps_novel))
+    assert transition_matrix(0, 1e12)[0, 2] == pytest.approx(0.5)
 
 
 def test_transition_symmetric_between_parents():
@@ -157,10 +153,10 @@ def strong_emissions(states, p=0.997):
     Returns
     -------
     numpy.ndarray
-        Emission probabilities, shape ``(n_loci, 4)``.
+        Emission probabilities, shape ``(n_loci, 3)``.
     """
     states = np.asarray(states)
-    em = np.full((len(states), 4), (1 - p) / 3)
+    em = np.full((len(states), 3), (1 - p) / 2)
     em[np.arange(len(states)), states] = p
     return em
 
@@ -264,11 +260,11 @@ def path_log_prob(path, pos, emissions, n_self, initial=None):
     pos : numpy.ndarray of int
         Marker positions, shape ``(n_loci,)``.
     emissions : numpy.ndarray
-        Unnormalized emission probabilities, shape ``(n_loci, 4)``.
+        Unnormalized emission probabilities, shape ``(n_loci, 3)``.
     n_self : int
         Number of generations of selfing, passed to `transition_matrix`.
     initial : array_like of float, optional
-        Initial state probabilities, length 4. Uniform if None.
+        Initial state probabilities, length 3. Uniform if None.
 
     Returns
     -------
@@ -277,9 +273,9 @@ def path_log_prob(path, pos, emissions, n_self, initial=None):
     """
     totals = emissions.sum(axis=1, keepdims=True)
     log_e = _logp(np.divide(
-        emissions, totals, out=np.full_like(emissions, 0.25), where=totals > 0
+        emissions, totals, out=np.full_like(emissions, 1 / 3), where=totals > 0
     ))
-    pi = np.ones(4) if initial is None else np.asarray(initial, dtype=float)
+    pi = np.ones(3) if initial is None else np.asarray(initial, dtype=float)
     pi = pi / pi.sum()
 
     score = _logp(pi[path[0]]) + log_e[0, path[0]]
@@ -289,11 +285,11 @@ def path_log_prob(path, pos, emissions, n_self, initial=None):
     return score
 
 
-@pytest.mark.parametrize("initial", [None, [0.7, 0.1, 0.15, 0.05]])
+@pytest.mark.parametrize("initial", [None, [0.7, 0.1, 0.2]])
 @pytest.mark.parametrize("N", [1, 2, 3])
 @pytest.mark.parametrize("seed", range(4))
 def test_viterbi_matches_brute_force(seed, N, initial):
-    """Viterbi finds the best of all 4**n paths that respect the minimum duration."""
+    """Viterbi finds the best of all 3**n paths that respect the minimum duration."""
     rng = np.random.default_rng(seed)
     n_loci = 6
     n_self = 3
@@ -301,11 +297,11 @@ def test_viterbi_matches_brute_force(seed, N, initial):
     # between all states plausible, and sharply peaked emissions favour
     # frequent switches, so the duration constraint binds for N > 1
     pos = np.cumsum(rng.integers(100_000, 5_000_000, size=n_loci))
-    emissions = rng.dirichlet(np.full(4, 0.1), size=n_loci)
+    emissions = rng.dirichlet(np.full(3, 0.1), size=n_loci)
 
     feasible_scores = [
         path_log_prob(path, pos, emissions, n_self, initial)
-        for path in itertools.product(range(4), repeat=n_loci)
+        for path in itertools.product(range(3), repeat=n_loci)
         if is_feasible(path, N)
     ]
 

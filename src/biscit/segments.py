@@ -71,8 +71,8 @@ def filter_short_stretches(summary_df, min_length=50000):
 
     Notes
     -----
-    State 3 is shared with the Novel state from the HMM, so after this step it
-    means "unassigned" rather than specifically a private allele.
+    The HMM only emits states 0-2; state 3 (unassigned) is introduced here and
+    in `add_boundary_regions`.
     """
     if len(summary_df) == 0:
         return summary_df.copy()

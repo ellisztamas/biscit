@@ -18,12 +18,12 @@ HMM-based imputation of offspring genotypes from parental PL arrays in
 - Every function gets a NumPy-style docstring: a summary line, an optional
   extended description, then `Parameters`, `Returns`, and `Raises` /
   `Notes` where relevant.
-- Give array shapes in double backticks, e.g. ``(n_loci, 4)``, and state
+- Give array shapes in double backticks, e.g. ``(n_loci, 3)``, and state
   dict keys explicitly. Refer to other parameters or functions with single
   backticks.
 - Spell out encodings: genotype columns are 0 = hom-REF, 1 = het,
   2 = hom-ALT; hidden states are 0 = AA (parent 1), 1 = AB, 2 = BB
-  (parent 2), 3 = Novel. From `segments.py` onwards state 3 also covers
+  (parent 2). State 3 is not an HMM state: it is added in `segments.py` for
   short and boundary segments, and is labelled "Unassigned" in the output.
 - Inline comments explain *why* or the biological meaning, not what the
   syntax does. Keep them short, one per logical step, and skip the obvious

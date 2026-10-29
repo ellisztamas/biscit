@@ -2,7 +2,7 @@
 
 HMM-based imputation of offspring genotypes from parental genotype data, designed for *Arabidopsis thaliana* RIL (recombinant inbred line) crosses.
 
-`biscit` reads Phred-scaled genotype likelihoods (`calldata/PL`) from HDF5-converted VCFs for an offspring and its two parents, builds per-marker emission probabilities, and decodes the most likely ancestry path (parent 1 homozygous, heterozygous, parent 2 homozygous, or a "novel"/private state) with a minimum-duration Viterbi algorithm. The result is a BED-like table of genotype segments per chromosome.
+`biscit` reads Phred-scaled genotype likelihoods (`calldata/PL`) from HDF5-converted VCFs for an offspring and its two parents, builds per-marker emission probabilities, and decodes the most likely ancestry path (parent 1 homozygous, heterozygous, or parent 2 homozygous) with a minimum-duration Viterbi algorithm. The result is a BED-like table of genotype segments per chromosome.
 
 ## Installation
 
@@ -70,8 +70,8 @@ stderr).
 `chrom`, `start_pos`, `end_pos`, `state`, `state_label`, `n_markers`
 
 State labels: `0=AA` (parent 1), `1=AB` (heterozygous), `2=BB` (parent 2),
-`3=Unassigned` (novel/private alleles, segments shorter than `--min-base-pairs`,
-and stretches at chromosome ends).
+`3=Unassigned` (segments shorter than `--min-base-pairs` and stretches at
+chromosome ends).
 
 
 ## License

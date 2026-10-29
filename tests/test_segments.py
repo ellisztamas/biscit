@@ -142,7 +142,7 @@ def test_chain_tiles_chromosome(seed):
     """summarize -> filter -> pad gives ordered, non-overlapping, complete segments."""
     rng = np.random.default_rng(seed)
     # Runs of random states and lengths, on irregularly spaced markers
-    path = np.repeat(rng.integers(0, 4, size=30), rng.integers(1, 20, size=30))
+    path = np.repeat(rng.integers(0, 3, size=30), rng.integers(1, 20, size=30))
     pos = np.cumsum(rng.integers(100, 5000, size=len(path)))
     chr_length = int(pos[-1]) + 1000
 

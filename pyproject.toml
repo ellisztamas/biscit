@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "biscit"
-version = "0.2.0"
+version = "0.3.0.dev0+heterozygosity"
 description = "HMM-based imputation of offspring genotypes from parental PL arrays (A. thaliana RIL crosses)"
 readme = "README.md"
 license = "MIT"
