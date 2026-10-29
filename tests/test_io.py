@@ -95,13 +95,14 @@ def test_only_shared_chromosomes_and_positions(tmp_path):
 
 def test_rows_aligned_when_positions_unsorted(tmp_path):
     """Each returned row belongs to the position it is reported at."""
-    def pl_for(p):
+    def pl_for(p, alt=False):
         # Distinct, valid PLs that identify their position
-        return [0, p, p + 1]
+        return [p + 1, p, 0] if alt else [0, p, p + 1]
 
     ref_pos = [50, 10, 40, 20, 30]
     off_pos = [30, 50, 20, 10, 40]
-    ref_pl = np.array([[pl_for(p), pl_for(p + 1000)] for p in ref_pos])
+    # Parents are opposite homozygotes so no locus is dropped as identical
+    ref_pl = np.array([[pl_for(p), pl_for(p + 1000, alt=True)] for p in ref_pos])
     off_pl = np.array([pl_for(p + 2000) for p in off_pos])
     files = write_pair(tmp_path, ["Chr1"] * 5, ref_pos, ref_pl, ["Chr1"] * 5, off_pos, off_pl)
 
@@ -131,6 +132,17 @@ def test_filters_drop_bad_locus(tmp_path, p1, p2, off):
     off_pl = np.array([REF, off, ALT])
     files = write_pair(tmp_path, ["Chr1"] * 3, [10, 20, 30], ref_pl, ["Chr1"] * 3, [10, 20, 30], off_pl)
     assert align(*files)["Chr1"]["positions"].tolist() == [10, 30]
+
+
+@pytest.mark.parametrize("shared", [REF, ALT], ids=["hom-REF", "hom-ALT"])
+@pytest.mark.parametrize("allow", [False, True])
+def test_identical_parent_homozygotes(tmp_path, shared, allow):
+    """Loci where the parents share a homozygote are dropped unless allowed."""
+    ref_pl = np.array([[REF, ALT], [shared, shared], [REF, ALT]])
+    off_pl = np.array([REF, shared, ALT])
+    files = write_pair(tmp_path, ["Chr1"] * 3, [10, 20, 30], ref_pl, ["Chr1"] * 3, [10, 20, 30], off_pl)
+    result = extract_aligned_pl(*files, "F10", "P1", "P2", allow_identical_sites=allow)
+    assert result["Chr1"]["positions"].tolist() == ([10, 20, 30] if allow else [10, 30])
 
 
 def test_het_offspring_is_kept(tmp_path):

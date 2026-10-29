@@ -94,6 +94,7 @@ def test_parser_defaults():
     assert args.output is None
     assert args.chromosomes is None
     assert args.chr_lengths is None
+    assert args.allow_identical_sites is False
 
 
 @pytest.mark.parametrize("drop", range(0, len(REQUIRED), 2))
@@ -179,7 +180,7 @@ def test_end_to_end_breakpoint_in_uninformative_stretch(simulated_ril_mixed_info
     correctly.
     """
     cross = simulated_ril_mixed_informativeness
-    result = run_to_table(cross, tmp_path)
+    result = run_to_table(cross, tmp_path, "--allow-identical-sites")
 
     assert result["state"].tolist() == [3, 0, 2, 3]
     decoded = states_at(result, cross.positions)

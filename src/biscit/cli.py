@@ -116,6 +116,13 @@ def build_parser():
         "--min-base-pairs", type=int, default=50000,
         help="Minimum genomic length (bp) before a stretch is reassigned to Unassigned (default: 50000).",
     )
+    parser.add_argument(
+        "--allow-identical-sites", action="store_true",
+        help=(
+            "Keep sites where both parents are most likely the same homozygote "
+            "(default: drop them)."
+        ),
+    )
     return parser
 
 
@@ -196,7 +203,8 @@ def main(argv=None):
     chr_lengths = args.chr_lengths or dict(DEFAULT_CHR_LENGTHS)
 
     pl_arrays = extract_aligned_pl(
-        args.input, args.reference, args.offspring, args.parent1, args.parent2
+        args.input, args.reference, args.offspring, args.parent1, args.parent2,
+        allow_identical_sites=args.allow_identical_sites,
     )
 
     if not pl_arrays:

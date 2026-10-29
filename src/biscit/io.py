@@ -65,14 +65,20 @@ def load_vcf_hdf5(path, sample_names):
     return chrom, pos, pl
 
 
-def extract_aligned_pl(input, reference, offspring_name, parent1_name, parent2_name):
+def extract_aligned_pl(
+    input, reference, offspring_name, parent1_name, parent2_name,
+    allow_identical_sites=False,
+):
     """
     Align offspring and parental PL arrays per chromosome.
 
     Loci are matched on chromosome and position only (alleles are not
     compared). A locus is dropped if, for any of the three individuals, any PL
     value is negative (missing, -1) or all are zero, or if either parent has
-    ``PL[1] == 0`` (i.e. the heterozygote is the most likely genotype).
+    ``PL[1] == 0`` (i.e. the heterozygote is the most likely genotype). Unless
+    `allow_identical_sites` is True, a locus is also dropped if both parents
+    are most likely the same homozygote (both ``PL[0] == 0`` or both
+    ``PL[2] == 0``).
 
     Parameters
     ----------
@@ -86,6 +92,9 @@ def extract_aligned_pl(input, reference, offspring_name, parent1_name, parent2_n
         Name of the first parent in `reference`.
     parent2_name : str
         Name of the second parent in `reference`.
+    allow_identical_sites : bool, optional
+        If True, keep loci where both parents are most likely the same
+        homozygote. These cannot distinguish the parents. Default is False.
 
     Returns
     -------
@@ -143,6 +152,12 @@ def extract_aligned_pl(input, reference, offspring_name, parent1_name, parent2_n
             | (parent1[:, 1] == 0)
             | (parent2[:, 1] == 0)
         )
+        # Parents sharing a homozygous genotype carry no ancestry information
+        if not allow_identical_sites:
+            keep &= ~(
+                ((parent1[:, 0] == 0) & (parent2[:, 0] == 0))
+                | ((parent1[:, 2] == 0) & (parent2[:, 2] == 0))
+            )
         if not np.any(keep):
             continue
 

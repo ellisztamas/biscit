@@ -64,6 +64,11 @@ stderr).
 | `-N`, `--min-markers` | 50 | Minimum state duration (in markers) in the decoder |
 | `--min-base-pairs` | 50000 | Minimum segment length (bp) before a stretch is marked Unassigned |
 | `--chr-lengths` | TAIR10 | `Chr1=30427671,Chr2=19698289,...` chromosome lengths |
+| `--allow-identical-sites` | off | Keep sites where both parents are most likely the same homozygote |
+
+By default, `biscit` drops sites where both parents are most likely the same
+homozygote (both have PL 0 for hom-REF, or both for hom-ALT). These sites
+cannot tell the parents apart. Pass `--allow-identical-sites` to keep them.
 
 ### Output columns
 
