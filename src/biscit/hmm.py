@@ -63,32 +63,32 @@ def get_emission_probs(pl_array, n_generations_selfing):
 
     # Homozygous for parent 1: offspring matches parent 1 at segregating sites
     pr_hom1 = (
-        gl_p1[:, 0] * gl_p2[:, 2] * gl_f10[:, 0]
+        gl_p1[:  , 0] * gl_p2[:, 2] * gl_f10[:, 0]
         + gl_p1[:, 2] * gl_p2[:, 0] * gl_f10[:, 2]
-        + gl_p1[:, 0] * gl_p2[:, 0] * gl_f10[:, 0] * (1 - pr_het_base) / 2
-        + gl_p1[:, 2] * gl_p2[:, 2] * gl_f10[:, 2] * (1 - pr_het_base) / 2
-    )
+        + gl_p1[:, 0] * gl_p2[:, 0] * gl_f10[:, 0]
+        + gl_p1[:, 2] * gl_p2[:, 2] * gl_f10[:, 2]
+    ) * (1 - pr_het_base) * 0.5
 
     # Heterozygous: offspring is het at segregating sites
     pr_het = (
-        gl_p1[:, 0] * gl_p2[:, 2] * gl_f10[:, 1]
+        gl_p1[  :, 0] * gl_p2[:, 2] * gl_f10[:, 1]
         + gl_p1[:, 2] * gl_p2[:, 0] * gl_f10[:, 1]
-        + gl_p1[:, 0] * gl_p2[:, 0] * gl_f10[:, 0] * pr_het_base
-        + gl_p1[:, 2] * gl_p2[:, 2] * gl_f10[:, 2] * pr_het_base
-    )
+        + gl_p1[:, 0] * gl_p2[:, 0] * gl_f10[:, 0]
+        + gl_p1[:, 2] * gl_p2[:, 2] * gl_f10[:, 2]
+    ) * pr_het_base
 
     # Homozygous for parent 2: offspring matches parent 2 at segregating sites
     pr_hom2 = (
-        gl_p1[:, 0] * gl_p2[:, 2] * gl_f10[:, 2]
+        gl_p1[  :, 0] * gl_p2[:, 2] * gl_f10[:, 2]
         + gl_p1[:, 2] * gl_p2[:, 0] * gl_f10[:, 0]
-        + gl_p1[:, 0] * gl_p2[:, 0] * gl_f10[:, 0] * (1 - pr_het_base) / 2
-        + gl_p1[:, 2] * gl_p2[:, 2] * gl_f10[:, 2] * (1 - pr_het_base) / 2
-    )
+        + gl_p1[:, 0] * gl_p2[:, 0] * gl_f10[:, 0]
+        + gl_p1[:, 2] * gl_p2[:, 2] * gl_f10[:, 2]
+    ) * (1 - pr_het_base) * 0.5
 
     # Private allele: parents agree but the offspring carries the other allele
     # (homozygous or het), e.g. a new mutation or a genotyping error
     pr_private = (
-        gl_p1[:, 0] * gl_p2[:, 0] * gl_f10[:, 2]
+        gl_p1[  :, 0] * gl_p2[:, 0] * gl_f10[:, 2]
         + gl_p1[:, 2] * gl_p2[:, 2] * gl_f10[:, 0]
         + gl_p1[:, 0] * gl_p2[:, 0] * gl_f10[:, 1]
         + gl_p1[:, 2] * gl_p2[:, 2] * gl_f10[:, 1]
