@@ -91,14 +91,15 @@ def get_emission_probs(pl_array, n_generations_selfing):
     return emission_probs
 
 
-def transition_matrix(pos1, pos2, cM_per_Mb=4.0, n_self=10):
+def transition_matrix(pos1, pos2, cM_per_Mb=4.0):
     """
     Compute the transition matrix between two adjacent markers.
 
-    The physical distance is converted to a recombination fraction using a
-    constant recombination rate and Haldane's map function, then to the
-    cumulative recombination fraction for a recombinant inbred line,
-    ``2r / (1 + 2r)``.
+    The physical distance is converted to a genetic distance in Morgans
+    assuming a constant recombination rate, and this is used directly as the
+    probability of leaving the current state. That probability is split
+    equally between the two other states, so all states, including the
+    heterozygous one, are treated alike.
 
     Parameters
     ----------
@@ -106,9 +107,6 @@ def transition_matrix(pos1, pos2, cM_per_Mb=4.0, n_self=10):
         Positions of the two markers in base pairs.
     cM_per_Mb : float, optional
         Recombination rate in centimorgans per megabase. Default is 4.0.
-    n_self : int, optional
-        Number of generations of selfing. Sets the probability of moving to or
-        from the heterozygous state, ``0.5 ** (n_self - 1)``. Default is 10.
 
     Returns
     -------
@@ -116,22 +114,19 @@ def transition_matrix(pos1, pos2, cM_per_Mb=4.0, n_self=10):
         Transition matrix of shape ``(3, 3)``, where entry ``[i, j]`` is the
         probability of moving from state ``i`` to state ``j``. States are
         ordered 0 = AA (parent 1), 1 = AB (heterozygous), 2 = BB (parent 2).
-    """
-    # Genetic distance in Morgans, assuming a constant recombination rate
-    d_M = cM_per_Mb * abs(pos2 - pos1) / 1e6 / 100
-    # Haldane's map function: distance -> recombination fraction per meiosis
-    r = 0.5 * (1 - np.exp(-2 * d_M))
-    # Cumulative recombination fraction in a RIL derived by selfing
-    r_ril = 2 * r / (1 + 2 * r)
-    # Probability of moving to or from the heterozygous state
-    h = 0.5 ** (n_self - 1)
 
-    # Transitions among AA, AB, BB; rows are the state at pos1
-    T = np.array([
-        [1 - r_ril - h, h,     r_ril],
-        [h / 2,         1 - h, h / 2],
-        [r_ril,         h,     1 - r_ril - h],
-    ])
+    Notes
+    -----
+    The genetic distance is not passed through a map function, so the matrix
+    is only a valid probability matrix while it is at most 1 Morgan (25 Mb at
+    the default rate). Beyond that the diagonal becomes negative.
+    """
+    # Genetic distance in Morgans, used directly as the switching probability
+    rate = cM_per_Mb * abs(pos2 - pos1) / 1e6 / 100
+
+    # Stay with probability 1 - rate; otherwise move to either other state
+    T = np.full((3, 3), rate / 2)
+    np.fill_diagonal(T, 1 - rate)
     return T
 
 
@@ -158,7 +153,9 @@ def viterbi_min_duration(pos, emissions, N, n_self, initial=None):
         Minimum number of consecutive markers in a state before a transition
         to a different state is allowed.
     n_self : int
-        Number of generations of selfing, passed to `transition_matrix`.
+        Number of generations of selfing. Currently unused, since
+        `transition_matrix` no longer depends on it; kept so that existing
+        callers still work.
     initial : array_like of float, optional
         Initial state probabilities, length 3. Normalized internally. If
         None, all states are equally likely.
@@ -211,7 +208,7 @@ def viterbi_min_duration(pos, emissions, N, n_self, initial=None):
 
     for t in range(1, n):
         # Transition probabilities depend on the distance between markers
-        T = np.asarray(transition_matrix(pos[t - 1], pos[t], n_self=n_self), dtype=float)
+        T = np.asarray(transition_matrix(pos[t - 1], pos[t]), dtype=float)
         logT = logp(T)
         new_score = np.full(n_aug, -np.inf)
         new_back = np.zeros(n_aug, dtype=int)
