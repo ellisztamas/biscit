@@ -93,10 +93,9 @@ def test_monomorphic_site_split_by_expected_frequencies(shared, n_gen):
 
 # transition_matrix
 
-@pytest.mark.parametrize("n_self", [2, 5, 10, 20])
-@pytest.mark.parametrize("distance", [0, 1_000, 1_000_000, 100_000_000])
-def test_transition_rows_are_distributions(distance, n_self):
-    T = transition_matrix(0, distance, n_self=n_self)
+@pytest.mark.parametrize("distance", [0, 1_000, 1_000_000, 25_000_000])
+def test_transition_rows_are_distributions(distance):
+    T = transition_matrix(0, distance)
     assert T.shape == (3, 3)
     assert (T >= 0).all()
     np.testing.assert_allclose(T.sum(axis=1), 1)
@@ -104,37 +103,33 @@ def test_transition_rows_are_distributions(distance, n_self):
 
 @pytest.mark.xfail(
     strict=True,
-    reason="AA->AA is 1 - r_ril - h, which is negative once 0.5 ** (n_self - 1) is large",
+    reason="No map function: the diagonal 1 - rate is negative beyond 1 Morgan",
 )
-@pytest.mark.parametrize("n_self", [0, 1])
-def test_transition_non_negative_for_few_selfing_generations(n_self):
-    assert (transition_matrix(0, 1_000_000, n_self=n_self) >= 0).all()
+def test_transition_non_negative_beyond_one_morgan():
+    assert (transition_matrix(0, 30_000_000) >= 0).all()
 
 
 def test_transition_no_recombination_at_zero_distance():
-    T = transition_matrix(500, 500)
-    assert T[0, 2] == 0
-    assert T[2, 0] == 0
+    np.testing.assert_array_equal(transition_matrix(500, 500), np.eye(3))
 
 
 def test_transition_order_of_positions_irrelevant():
     np.testing.assert_array_equal(transition_matrix(100, 90_000), transition_matrix(90_000, 100))
 
 
-def test_transition_recombination_increases_to_ril_limit():
-    distances = [1e3, 1e4, 1e5, 1e6, 1e7, 1e8]
-    aa_to_bb = [transition_matrix(0, d)[0, 2] for d in distances]
-    assert (np.diff(aa_to_bb) > 0).all()
-    # Unlinked markers: Haldane r -> 0.5, so r_ril -> 2 * 0.5 / (1 + 1) = 0.5
-    assert transition_matrix(0, 1e12)[0, 2] == pytest.approx(0.5)
+def test_transition_rate_is_linear_in_distance():
+    """1 Mb at 4 cM/Mb is 0.04 Morgans, split equally between the other two states."""
+    T = transition_matrix(0, 1_000_000)
+    assert T[0, 0] == pytest.approx(0.96)
+    assert T[0, 2] == pytest.approx(0.02)
+    assert transition_matrix(0, 2_000_000)[0, 2] == pytest.approx(0.04)
+    assert transition_matrix(0, 1_000_000, cM_per_Mb=8.0)[0, 2] == pytest.approx(0.04)
 
 
-def test_transition_symmetric_between_parents():
+def test_transition_all_states_treated_alike():
     T = transition_matrix(0, 2_000_000)
-    assert T[0, 0] == T[2, 2]
-    assert T[0, 2] == T[2, 0]
-    assert T[0, 1] == T[2, 1]
-    assert T[1, 0] == T[1, 2]
+    assert len(set(np.diag(T))) == 1
+    assert len(set(T[~np.eye(3, dtype=bool)])) == 1
 
 
 # viterbi_min_duration
@@ -246,7 +241,7 @@ def is_feasible(path, N):
     return all(length >= N for length in run_lengths(path)[1:-1])
 
 
-def path_log_prob(path, pos, emissions, n_self, initial=None):
+def path_log_prob(path, pos, emissions, initial=None):
     """
     Joint log probability of a state path and the observations.
 
@@ -261,8 +256,6 @@ def path_log_prob(path, pos, emissions, n_self, initial=None):
         Marker positions, shape ``(n_loci,)``.
     emissions : numpy.ndarray
         Unnormalized emission probabilities, shape ``(n_loci, 3)``.
-    n_self : int
-        Number of generations of selfing, passed to `transition_matrix`.
     initial : array_like of float, optional
         Initial state probabilities, length 3. Uniform if None.
 
@@ -280,7 +273,7 @@ def path_log_prob(path, pos, emissions, n_self, initial=None):
 
     score = _logp(pi[path[0]]) + log_e[0, path[0]]
     for t in range(1, len(path)):
-        log_t = _logp(transition_matrix(pos[t - 1], pos[t], n_self=n_self))
+        log_t = _logp(transition_matrix(pos[t - 1], pos[t]))
         score += log_t[path[t - 1], path[t]] + log_e[t, path[t]]
     return score
 
@@ -293,14 +286,13 @@ def test_viterbi_matches_brute_force(seed, N, initial):
     rng = np.random.default_rng(seed)
     n_loci = 6
     n_self = 3
-    # Multi-megabase gaps and few selfing generations make transitions
-    # between all states plausible, and sharply peaked emissions favour
+    # Multi-megabase gaps make transitions between all states plausible, and sharply peaked emissions favour
     # frequent switches, so the duration constraint binds for N > 1
     pos = np.cumsum(rng.integers(100_000, 5_000_000, size=n_loci))
     emissions = rng.dirichlet(np.full(3, 0.1), size=n_loci)
 
     feasible_scores = [
-        path_log_prob(path, pos, emissions, n_self, initial)
+        path_log_prob(path, pos, emissions, initial)
         for path in itertools.product(range(3), repeat=n_loci)
         if is_feasible(path, N)
     ]
@@ -310,6 +302,6 @@ def test_viterbi_matches_brute_force(seed, N, initial):
     assert decoded.shape == (n_loci,)
     assert is_feasible(decoded, N)
     # Compare scores rather than paths, since ties may be broken differently
-    assert path_log_prob(decoded, pos, emissions, n_self, initial) == pytest.approx(
+    assert path_log_prob(decoded, pos, emissions, initial) == pytest.approx(
         max(feasible_scores)
     )
