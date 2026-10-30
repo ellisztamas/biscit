@@ -2,7 +2,7 @@
 
 HMM-based imputation of offspring genotypes from parental genotype data, designed for *Arabidopsis thaliana* RIL (recombinant inbred line) crosses.
 
-`biscit` reads Phred-scaled genotype likelihoods (`calldata/PL`) from HDF5-converted VCFs for an offspring and its two parents, builds per-marker emission probabilities, and decodes the most likely ancestry path (parent 1 homozygous, heterozygous, or parent 2 homozygous) with a minimum-duration Viterbi algorithm. The result is a BED-like table of genotype segments per chromosome.
+`biscit` reads allelic depths (`calldata/AD`) for an offspring and Phred-scaled genotype likelihoods (`calldata/PL`) for its two parents from HDF5-converted VCFs. It converts the offspring's read counts to genotype likelihoods using a per-read mapping error rate, builds per-marker emission probabilities, and decodes the most likely ancestry path (parent 1 homozygous, heterozygous, or parent 2 homozygous) with a minimum-duration Viterbi algorithm. The result is a BED-like table of genotype segments per chromosome.
 
 ## Installation
 
@@ -33,6 +33,8 @@ import allel
 allel.vcf_to_hdf5('example.vcf', 'example.h5', fields='*', overwrite=True)
 ```
 
+The `--input` (offspring) file must contain the `AD` field and the `--reference` (parental) file the `PL` field.
+
 ## Usage
 
 Check input parameters:
@@ -60,6 +62,7 @@ stderr).
 
 | Option | Default | Meaning |
 | --- | --- | --- |
+| `--mapping-error` | 0.05 | Probability that an offspring read shows the wrong allele |
 | `--n-generations-selfing` | 10 | Selfing generations used for emission probabilities |
 | `-N`, `--min-markers` | 50 | Minimum state duration (in markers) in the decoder |
 | `--min-base-pairs` | 50000 | Minimum segment length (bp) before a stretch is marked Unassigned |

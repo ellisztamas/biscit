@@ -1,10 +1,11 @@
 # biscit
 
-HMM-based imputation of offspring genotypes from parental PL arrays in
-*A. thaliana* RIL crosses. Source is in `src/biscit/`:
+HMM-based imputation of offspring genotypes from offspring allelic depths
+(AD) and parental PL arrays in *A. thaliana* RIL crosses. Source is in `src/biscit/`:
 
-- `io.py`: load PL from scikit-allel-style HDF5 files and align offspring
-  with parents per chromosome
+- `io.py`: load parental PL and offspring AD from scikit-allel-style HDF5
+  files, convert the offspring AD to PL, and align offspring with parents
+  per chromosome
 - `hmm.py`: emission probabilities, transition matrix, and minimum-duration
   Viterbi decoding
 - `segments.py`: collapse the decoded path into segments, mask short ones,

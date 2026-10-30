@@ -10,9 +10,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from biscit.cli import DEFAULT_CHR_LENGTHS, build_parser, main, parse_chr_lengths, process_chromosome
+from biscit.cli import (
+    DEFAULT_CHR_LENGTHS, build_parser, main, parse_chr_lengths, parse_mapping_error, process_chromosome,
+)
 from biscit.io import extract_aligned_pl
-from conftest import PL_BY_GENOTYPE, write_h5
+from conftest import AD_BY_GENOTYPE, PL_BY_GENOTYPE, write_h5
 
 
 OUTPUT_COLUMNS = ["chrom", "start_pos", "end_pos", "state", "state_label", "n_markers"]
@@ -83,6 +85,16 @@ def test_parse_chr_lengths_rejects_malformed(value):
         parse_chr_lengths(value)
 
 
+def test_parse_mapping_error_accepts_valid():
+    assert parse_mapping_error("0.01") == 0.01
+
+
+@pytest.mark.parametrize("value", ["0", "0.5", "-0.1", "1", "abc"])
+def test_parse_mapping_error_rejects_invalid(value):
+    with pytest.raises(argparse.ArgumentTypeError):
+        parse_mapping_error(value)
+
+
 REQUIRED = ["--input", "a.h5", "--reference", "b.h5", "--offspring", "O", "--parent1", "A", "--parent2", "B"]
 
 
@@ -91,6 +103,7 @@ def test_parser_defaults():
     assert args.n_generations_selfing == 10
     assert args.min_markers == 50
     assert args.min_base_pairs == 50000
+    assert args.mapping_error == 0.05
     assert args.output is None
     assert args.chromosomes is None
     assert args.chr_lengths is None
@@ -108,6 +121,12 @@ def test_parser_requires_arguments(drop):
 def test_parser_rejects_bad_chr_lengths():
     with pytest.raises(SystemExit) as exc:
         build_parser().parse_args(REQUIRED + ["--chr-lengths", "Chr1"])
+    assert exc.value.code == 2
+
+
+def test_parser_rejects_bad_mapping_error():
+    with pytest.raises(SystemExit) as exc:
+        build_parser().parse_args(REQUIRED + ["--mapping-error", "0.6"])
     assert exc.value.code == 2
 
 
@@ -214,7 +233,7 @@ def test_end_to_end_no_shared_markers(tmp_path, capsys):
     reference = tmp_path / "reference.h5"
     offspring = tmp_path / "offspring.h5"
     write_h5(reference, ["P1", "P2"], ["Chr1"] * 2, [10, 20], [[ref, alt]] * 2)
-    write_h5(offspring, ["F10"], ["Chr1"] * 2, [15, 25], [[ref]] * 2)
+    write_h5(offspring, ["F10"], ["Chr1"] * 2, [15, 25], ad=[[AD_BY_GENOTYPE[0]]] * 2)
     out = tmp_path / "segments.tsv"
 
     argv = [
@@ -224,6 +243,36 @@ def test_end_to_end_no_shared_markers(tmp_path, capsys):
     assert main(argv) == 1
     assert "No comparable markers" in capsys.readouterr().err
     assert not out.exists()
+
+
+def test_end_to_end_offspring_without_ad(simulated_ril, tmp_path, capsys):
+    """An offspring file with only PL fails with a message, not a traceback."""
+    cross = simulated_ril
+    n = len(cross.positions)
+    write_h5(
+        cross.input, [cross.offspring], [cross.chrom] * n, cross.positions,
+        PL_BY_GENOTYPE[cross.genotypes["offspring"]][:, None, :],
+    )
+    out = tmp_path / "segments.tsv"
+
+    assert main(cross.argv("-o", str(out))) == 1
+    err = capsys.readouterr().err
+    assert "Error:" in err and "calldata/AD" in err
+    assert not out.exists()
+
+
+def test_end_to_end_unknown_sample(simulated_ril, tmp_path, capsys):
+    cross = simulated_ril
+    argv = cross.argv("-o", str(tmp_path / "segments.tsv"))
+    argv[argv.index("--parent2") + 1] = "P9"
+    assert main(argv) == 1
+    assert "P9" in capsys.readouterr().err
+
+
+def test_end_to_end_mapping_error_option(simulated_ril, tmp_path):
+    """A different mapping error still recovers the clean simulated cross."""
+    result = run_to_table(simulated_ril, tmp_path, "--mapping-error", "0.01")
+    assert result["state"].tolist() == [3, 0, 2, 3]
 
 
 def test_end_to_end_skips_unknown_requested_chromosome(simulated_ril, tmp_path, capsys):

@@ -61,6 +61,40 @@ def parse_chr_lengths(value):
     return lengths
 
 
+def parse_mapping_error(value):
+    """
+    Parse and validate a per-read mapping error rate.
+
+    Used as the argparse ``type`` for ``--mapping-error``.
+
+    Parameters
+    ----------
+    value : str
+        Error rate as a decimal string, e.g. ``"0.05"``.
+
+    Returns
+    -------
+    float
+        The error rate.
+
+    Raises
+    ------
+    argparse.ArgumentTypeError
+        If `value` is not a number strictly between 0 and 0.5.
+    """
+    try:
+        rate = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"Invalid mapping error '{value}'.")
+    # At 0 a single discordant read rules out a genotype; at 0.5 reads carry
+    # no information
+    if not 0 < rate < 0.5:
+        raise argparse.ArgumentTypeError(
+            f"Mapping error must be between 0 and 0.5 (exclusive), got {value}."
+        )
+    return rate
+
+
 def build_parser():
     """
     Build the command-line argument parser for ``biscit``.
@@ -69,20 +103,21 @@ def build_parser():
     -------
     argparse.ArgumentParser
         Parser for the input files, sample names, output path, chromosome
-        selection and lengths, and the HMM and filtering parameters.
+        selection and lengths, the read mapping error, and the HMM and
+        filtering parameters.
     """
     parser = argparse.ArgumentParser(
         prog="biscit",
         description=(
-            "HMM-based imputation of offspring genotypes from parental PL arrays "
-            "(A. thaliana RIL crosses)."
+            "HMM-based imputation of offspring genotypes from offspring allelic "
+            "depths and parental PL arrays (A. thaliana RIL crosses)."
         ),
     )
-    parser.add_argument("--input", required=True, help="Path to the test/offspring HDF5 file.")
+    parser.add_argument("--input", required=True, help="Path to the test/offspring HDF5 file. Must contain calldata/AD.")
     parser.add_argument(
         "--reference", required=True, 
         help=(
-            "Path to the reference/parental HDF5 file. "
+            "Path to the reference/parental HDF5 file. Must contain calldata/PL. "
             "REF/ALT alleles must be coded identically to those in --input."
             )
     )
@@ -102,6 +137,13 @@ def build_parser():
         help=(
             "Chromosome lengths as 'Chr1=30427671,Chr2=19698289,...'. "
             "Defaults to TAIR10 lengths."
+        ),
+    )
+    parser.add_argument(
+        "--mapping-error", type=parse_mapping_error, default=0.05,
+        help=(
+            "Probability that an offspring read shows the wrong allele, used to "
+            "convert allelic depths to genotype likelihoods (default: 0.05)."
         ),
     )
     parser.add_argument(
@@ -180,7 +222,8 @@ def main(argv=None):
     """
     Run ``biscit`` from the command line.
 
-    Loads and aligns the offspring and parental PL arrays, decodes each
+    Converts the offspring allelic depths to PL, aligns them with the
+    parental PL arrays, decodes each
     selected chromosome, and writes a BED-like TSV with columns ``chrom``,
     ``start_pos``, ``end_pos``, ``state``, ``state_label`` and ``n_markers``.
     Progress messages and warnings go to stderr.
@@ -193,8 +236,9 @@ def main(argv=None):
     Returns
     -------
     int
-        Exit status: 0 on success, 1 if there are no comparable markers or
-        nothing to output.
+        Exit status: 0 on success, 1 if an input file lacks a required field
+        or sample, there are no comparable markers, or there is nothing to
+        output.
     """
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -202,10 +246,17 @@ def main(argv=None):
     # argparse does not apply `type` to a None default, so fill it in here
     chr_lengths = args.chr_lengths or dict(DEFAULT_CHR_LENGTHS)
 
-    pl_arrays = extract_aligned_pl(
-        args.input, args.reference, args.offspring, args.parent1, args.parent2,
-        allow_identical_sites=args.allow_identical_sites,
-    )
+    try:
+        pl_arrays = extract_aligned_pl(
+            args.input, args.reference, args.offspring, args.parent1, args.parent2,
+            mapping_error=args.mapping_error,
+            allow_identical_sites=args.allow_identical_sites,
+        )
+    except KeyError as e:
+        # Missing fields or samples are input problems, not bugs, so report
+        # the message without a traceback
+        print(f"Error: {e.args[0]}", file=sys.stderr)
+        return 1
 
     if not pl_arrays:
         print("No comparable markers found between input and reference.", file=sys.stderr)

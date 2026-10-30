@@ -33,7 +33,9 @@ def get_emission_probs(pl_array, n_generations_selfing):
     pl_array : dict of str to numpy.ndarray
         PL arrays for a single chromosome, with keys ``"offspring"``,
         ``"parent1"`` and ``"parent2"``, each of shape ``(n_loci, 3)``, as
-        returned per chromosome by `biscit.io.extract_aligned_pl`.
+        returned per chromosome by `biscit.io.extract_aligned_pl`. The
+        ``"offspring"`` array is float, computed from allelic depths by
+        `biscit.io.ad_to_pl`.
     n_generations_selfing : int
         Number of generations of selfing. Used to compute the expected
         residual heterozygosity, ``0.5 ** n_generations_selfing``.

@@ -15,6 +15,14 @@ PL_BY_GENOTYPE = np.array([
     [60, 60, 0],
 ])
 
+# AD rows (REF count, ALT count) for a confidently called genotype, indexed
+# by genotype code as for `PL_BY_GENOTYPE`
+AD_BY_GENOTYPE = np.array([
+    [20, 0],
+    [10, 10],
+    [0, 20],
+])
+
 CHROM = "Chr1"
 SPACING = 1000
 
@@ -27,7 +35,7 @@ class Cross:
     Attributes
     ----------
     input : pathlib.Path
-        HDF5 file containing the offspring sample.
+        HDF5 file containing the offspring sample, with AD only.
     reference : pathlib.Path
         HDF5 file containing both parental samples.
     offspring, parent1, parent2 : str
@@ -88,9 +96,12 @@ class Cross:
         ]
 
 
-def write_h5(path, samples, chrom, pos, pl):
+def write_h5(path, samples, chrom, pos, pl=None, ad=None):
     """
     Write a minimal HDF5 file in scikit-allel layout.
+
+    Only the calldata fields that are given are written, so a file can hold
+    PL, AD, both or neither.
 
     Parameters
     ----------
@@ -102,14 +113,19 @@ def write_h5(path, samples, chrom, pos, pl):
         Chromosome of each variant, shape ``(n_variants,)``.
     pos : array_like of int
         Position of each variant, shape ``(n_variants,)``.
-    pl : array_like of int
+    pl : array_like of int, optional
         Phred-scaled likelihoods, shape ``(n_variants, n_samples, 3)``.
+    ad : array_like of int, optional
+        Allelic depths (REF, ALT), shape ``(n_variants, n_samples, 2)``.
     """
     with h5py.File(path, "w") as h5:
         h5["samples"] = np.array([s.encode("utf-8") for s in samples])
         h5.create_dataset("variants/CHROM", data=np.array(chrom, dtype="S"))
         h5["variants/POS"] = np.asarray(pos)
-        h5["calldata/PL"] = np.asarray(pl, dtype=np.int32)
+        if pl is not None:
+            h5["calldata/PL"] = np.asarray(pl, dtype=np.int32)
+        if ad is not None:
+            h5["calldata/AD"] = np.asarray(ad, dtype=np.int32)
 
 
 def offspring_genotypes(gt1, gt2, ancestry):
@@ -140,7 +156,8 @@ def make_cross(directory, gt1, gt2, ancestry):
     Write parental and offspring HDF5 files for one simulated chromosome.
 
     Markers are placed every `SPACING` bp starting at `SPACING`, and every
-    genotype is called confidently using `PL_BY_GENOTYPE`.
+    genotype is called confidently: parents with `PL_BY_GENOTYPE` and the
+    offspring with `AD_BY_GENOTYPE`.
 
     Parameters
     ----------
@@ -169,7 +186,7 @@ def make_cross(directory, gt1, gt2, ancestry):
         reference, ["P1", "P2"], chrom, positions,
         np.stack([PL_BY_GENOTYPE[gt1], PL_BY_GENOTYPE[gt2]], axis=1),
     )
-    write_h5(input, ["F10"], chrom, positions, PL_BY_GENOTYPE[gt_off][:, None, :])
+    write_h5(input, ["F10"], chrom, positions, ad=AD_BY_GENOTYPE[gt_off][:, None, :])
 
     return Cross(
         input=input,
