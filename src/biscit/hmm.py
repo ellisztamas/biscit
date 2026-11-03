@@ -130,7 +130,7 @@ def transition_matrix(pos1, pos2, cM_per_Mb=4.0):
     return T
 
 
-def viterbi_min_duration(pos, emissions, N, n_self, initial=None):
+def viterbi_min_duration(pos, emissions, N, n_self, initial=None, cM_per_Mb=4.0):
     """
     Find the most likely state path with a minimum segment length.
 
@@ -159,6 +159,9 @@ def viterbi_min_duration(pos, emissions, N, n_self, initial=None):
     initial : array_like of float, optional
         Initial state probabilities, length 3. Normalized internally. If
         None, all states are equally likely.
+    cM_per_Mb : float, optional
+        Recombination rate in centimorgans per megabase, passed to
+        `transition_matrix`. Default is 4.0.
 
     Returns
     -------
@@ -168,8 +171,7 @@ def viterbi_min_duration(pos, emissions, N, n_self, initial=None):
 
     Notes
     -----
-    Transition probabilities use the default recombination rate of
-    `transition_matrix`. Run time scales as ``O(n_loci * N)``.
+    Run time scales as ``O(n_loci * N)``.
     """
     # Normalize emissions per locus; loci with no support become uniform
     n, n_states = emissions.shape
@@ -208,7 +210,9 @@ def viterbi_min_duration(pos, emissions, N, n_self, initial=None):
 
     for t in range(1, n):
         # Transition probabilities depend on the distance between markers
-        T = np.asarray(transition_matrix(pos[t - 1], pos[t]), dtype=float)
+        T = np.asarray(
+            transition_matrix(pos[t - 1], pos[t], cM_per_Mb=cM_per_Mb), dtype=float
+        )
         logT = logp(T)
         new_score = np.full(n_aug, -np.inf)
         new_back = np.zeros(n_aug, dtype=int)

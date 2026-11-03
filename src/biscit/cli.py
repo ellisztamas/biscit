@@ -95,6 +95,39 @@ def parse_mapping_error(value):
     return rate
 
 
+def parse_recombination_rate(value):
+    """
+    Parse and validate a recombination rate.
+
+    Used as the argparse ``type`` for ``--cM-per-Mb``.
+
+    Parameters
+    ----------
+    value : str
+        Recombination rate in centimorgans per megabase, e.g. ``"4.0"``.
+
+    Returns
+    -------
+    float
+        The recombination rate.
+
+    Raises
+    ------
+    argparse.ArgumentTypeError
+        If `value` is not a positive number.
+    """
+    try:
+        rate = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"Invalid recombination rate '{value}'.")
+    # At 0 the transition matrix is the identity, so no switches are possible
+    if not rate > 0:
+        raise argparse.ArgumentTypeError(
+            f"Recombination rate must be positive, got {value}."
+        )
+    return rate
+
+
 def build_parser():
     """
     Build the command-line argument parser for ``biscit``.
@@ -103,8 +136,8 @@ def build_parser():
     -------
     argparse.ArgumentParser
         Parser for the input files, sample names, output path, chromosome
-        selection and lengths, the read mapping error, and the HMM and
-        filtering parameters.
+        selection and lengths, the read mapping error, the recombination
+        rate, and the HMM and filtering parameters.
     """
     parser = argparse.ArgumentParser(
         prog="biscit",
@@ -151,6 +184,13 @@ def build_parser():
         help="Number of selfing generations for emission probabilities (default: 10).",
     )
     parser.add_argument(
+        "--cM-per-Mb", dest="cM_per_Mb", type=parse_recombination_rate, default=4.0,
+        help=(
+            "Recombination rate (cM/Mb) used to convert distances between markers "
+            "to transition probabilities (default: 4.0)."
+        ),
+    )
+    parser.add_argument(
         "-N", "--min-markers", type=int, default=50,
         help="Minimum state duration (markers) for the Viterbi decoder (default: 50).",
     )
@@ -190,8 +230,8 @@ def process_chromosome(chrom, data, chr_length, args):
     chr_length : int
         Chromosome length in base pairs.
     args : argparse.Namespace
-        Parsed arguments; uses ``n_generations_selfing``, ``min_markers`` and
-        ``min_base_pairs``.
+        Parsed arguments; uses ``n_generations_selfing``, ``cM_per_Mb``,
+        ``min_markers`` and ``min_base_pairs``.
 
     Returns
     -------
@@ -208,6 +248,7 @@ def process_chromosome(chrom, data, chr_length, args):
         N=args.min_markers,
         n_self=args.n_generations_selfing,
         initial=None,
+        cM_per_Mb=args.cM_per_Mb,
     )
     # Collapse to segments, mask short ones, then pad to chromosome ends
     bed_table_long = summarize_path(best_path, data["positions"])

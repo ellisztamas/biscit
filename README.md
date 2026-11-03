@@ -69,6 +69,12 @@ By default, `biscit` drops sites where both parents are most likely the same
 homozygote (both have PL 0 for hom-REF, or both for hom-ALT). These sites
 cannot tell the parents apart. Pass `--allow-identical-sites` to keep them (for example, if the parents share long tracts of genome identical by descent).
 
+`--cM-per-Mb` sets the probability of switching state between neighbouring markers.
+One rate is used for the whole genome. The default of 4 cM/Mb is a rough genome-wide
+average for *A. thaliana*. Raise it to allow more breakpoints, or lower it if you
+see spurious short switches. See [docs/how_biscit_works.md](docs/how_biscit_works.md)
+for how the rate enters the transition matrix.
+
 ### Output columns
 
 `chrom`, `start_pos`, `end_pos`, `state`, `state_label`, `n_markers`
